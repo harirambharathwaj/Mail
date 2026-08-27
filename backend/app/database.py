@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime, timezone
 import json
@@ -22,10 +22,18 @@ class Analysis(Base):
     reasons = Column(Text, nullable=False)
     signals = Column(Text, nullable=False)
     actions = Column(Text, nullable=False)
+    qr_analysis = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 def init_db():
     Base.metadata.create_all(engine)
+    # Automatically add missing column to existing SQLite database if needed
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE analyses ADD COLUMN qr_analysis TEXT"))
+            conn.commit()
+        except Exception:
+            pass
 
 def save_analysis(request, result):
     db = SessionLocal()
@@ -39,6 +47,7 @@ def save_analysis(request, result):
             reasons=json.dumps(result["reasons"]),
             signals=json.dumps(result["signals"]),
             actions=json.dumps(result["actions"]),
+            qr_analysis=json.dumps(result.get("quishing") or {}),
         )
         db.add(row)
         db.commit()
@@ -62,6 +71,7 @@ def get_recent(limit=50):
                 "reasons": json.loads(r.reasons),
                 "signals": json.loads(r.signals),
                 "actions": json.loads(r.actions),
+                "quishing": json.loads(r.qr_analysis) if getattr(r, "qr_analysis", None) else None,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows

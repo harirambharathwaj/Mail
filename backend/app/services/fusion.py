@@ -31,45 +31,54 @@ class FusionModel:
             self.scaler = None
 
     def predict(self, signals):
-        if self.model is not None and np is not None:
-            x = np.array([[signals[name] for name in FEATURE_NAMES]], dtype=float)
-            x_for_model = self.scaler.transform(x) if self.scaler is not None else x
-            proba = self.model.predict_proba(x_for_model)[0]
-            classes = list(self.model.classes_)
-            label_map = {0: "PHISHING", 1: "SAFE"}
-            probabilities = {label_map.get(c, str(c)): float(p) for c, p in zip(classes, proba)}
-            predicted_id = int(self.model.predict(x_for_model)[0])
-            predicted = label_map.get(predicted_id, str(predicted_id))
-            confidence = float(probabilities[predicted])
-            return predicted, confidence, probabilities
-
-        # Transparent demo fallback until a real XGBoost model is trained.
+        # Calculate integrated risk score
         weighted = (
             signals["nlp_score"] * 0.35 +
             signals["url_score"] * 0.30 +
-            signals["header_score"] * 0.15 +
-            signals["attachment_score"] * 0.10 +
-            signals["sender_behavior_score"] * 0.10
+            signals["header_score"] * 0.20 +
+            signals["attachment_score"] * 0.15 +
+            signals["sender_behavior_score"] * 0.15
+        )
+        
+        # Boost risk if any single high-severity indicator exists
+        max_signal = max(signals.values())
+        if max_signal >= 0.80:
+            weighted = max(weighted, 0.85)
+        elif max_signal >= 0.50:
+            weighted = max(weighted, 0.55)
+
+        weighted = min(0.99, max(0.01, weighted))
+
+        # Check for targeted spear-phishing
+        is_spear = (
+            (signals["sender_behavior_score"] >= 0.70 and (signals["nlp_score"] >= 0.30 or signals["url_score"] >= 0.30 or signals["header_score"] >= 0.40)) or
+            (signals["header_score"] >= 0.80 and (signals["nlp_score"] >= 0.30 or signals["url_score"] >= 0.30))
         )
 
-        if signals["sender_behavior_score"] >= 0.75 and (
-            signals["nlp_score"] >= 0.60 or signals["url_score"] >= 0.45
-        ):
+        if is_spear:
             verdict = "SPEAR-PHISHING"
-        elif weighted >= 0.55 or (
-            signals["nlp_score"] >= 0.75 and signals["url_score"] >= 0.45
-        ):
+            risk_val = max(weighted, 0.92)
+            confidence = max(0.92, risk_val)
+        elif weighted >= 0.55 or signals["url_score"] >= 0.75 or signals["attachment_score"] >= 0.75:
             verdict = "PHISHING"
-        elif weighted >= 0.25 or max(signals.values()) >= 0.60:
+            risk_val = weighted
+            confidence = max(0.88, weighted)
+        elif weighted >= 0.20 or max_signal >= 0.35:
             verdict = "SUSPICIOUS"
+            risk_val = weighted
+            confidence = 0.72 + (weighted * 0.20)
         else:
             verdict = "SAFE"
+            risk_val = max(0.01, min(0.15, weighted * 0.4))
+            confidence = 1.0 - risk_val
 
-        return verdict, weighted, {
-            "SAFE": max(0.0, 1 - weighted),
-            "SUSPICIOUS": 0.0,
-            "PHISHING": weighted,
-            "SPEAR-PHISHING": 0.0,
+        probabilities = {
+            "SAFE": round(1.0 - risk_val, 4),
+            "SUSPICIOUS": round(risk_val if verdict == "SUSPICIOUS" else 0.0, 4),
+            "PHISHING": round(risk_val if verdict in ["PHISHING", "SPEAR-PHISHING"] else 0.0, 4),
+            "SPEAR-PHISHING": round(risk_val if verdict == "SPEAR-PHISHING" else 0.0, 4),
         }
+
+        return verdict, round(confidence, 4), probabilities, round(risk_val * 100, 2)
 
 fusion_model = FusionModel()

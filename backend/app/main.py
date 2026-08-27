@@ -46,6 +46,34 @@ def analyze(request: EmailRequest):
     result["id"] = row.id
     return result
 
+from .services.qr_service import analyze_email_quishing, process_single_qr
+from pydantic import BaseModel
+from typing import Optional, List, Any
+
+class QRAnalyzeRequest(BaseModel):
+    body: Optional[str] = ""
+    attachments: Optional[List[Any]] = []
+    inline_images: Optional[List[str]] = []
+    raw_payload: Optional[str] = None
+
+@app.post("/api/analyze/qr")
+def analyze_qr(request: QRAnalyzeRequest):
+    if request.raw_payload:
+        item = process_single_qr({
+            "source": "api_direct",
+            "payload": request.raw_payload,
+            "decoded": True,
+            "filename": "direct_input"
+        })
+        from .services.qr_risk import calculate_overall_qr_risk
+        return calculate_overall_qr_risk([item])
+    
+    return analyze_email_quishing(
+        body=request.body or "",
+        attachments=request.attachments or [],
+        inline_images=request.inline_images or []
+    )
+
 @app.get("/api/alerts")
 def alerts(limit: int = 50):
     return get_recent(limit)

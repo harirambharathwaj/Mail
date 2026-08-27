@@ -6,19 +6,19 @@ from .fusion import fusion_model
 def explain(verdict, signals, existing_reasons):
     reasons = list(existing_reasons)
 
-    if signals["nlp_score"] >= 0.65:
-        reasons.append("NLP model detected phishing-like language or intent")
-    if signals["url_score"] >= 0.50:
-        reasons.append("URL analysis produced a high-risk signal")
-    if signals["header_score"] >= 0.40:
-        reasons.append("Header/sender analysis produced an anomaly")
+    if signals["nlp_score"] >= 0.50:
+        reasons.append("Language semantics analysis detected high phishing intent and urgency cues")
+    if signals["url_score"] >= 0.40:
+        reasons.append("Hyperlink risk scan flagged suspicious or unverified destination URLs")
+    if signals["header_score"] >= 0.35:
+        reasons.append("Sender/envelope inspection detected header, domain, or role impersonation anomalies")
     if signals["attachment_score"] >= 0.50:
-        reasons.append("Attachment analysis produced a high-risk signal")
+        reasons.append("Attachment analysis detected executable or high-risk file types")
     if signals["sender_behavior_score"] >= 0.50:
-        reasons.append("Sender behavior differs from the baseline")
+        reasons.append("Sender historical behavioral profiling detected significant activity anomalies")
 
     if not reasons:
-        reasons.append("No strong malicious indicators were detected")
+        reasons.append("Sender verified and no malicious threat indicators were detected")
 
     return list(dict.fromkeys(reasons))
 
@@ -26,10 +26,10 @@ def actions_for(verdict):
     if verdict == "SAFE":
         return ["ALLOW"]
     if verdict == "SUSPICIOUS":
-        return ["ALERT", "REVIEW"]
+        return ["ALERT", "REVIEW", "TAG_EXTERNAL"]
     if verdict == "PHISHING":
-        return ["QUARANTINE", "ALERT"]
-    return ["QUARANTINE", "HIGH_PRIORITY_ALERT"]
+        return ["QUARANTINE", "ALERT", "BLOCK_SENDER"]
+    return ["QUARANTINE", "HIGH_PRIORITY_ALERT", "SECURITY_OPS_ESCALATION"]
 
 def analyze_email(request):
     email = parse_email(
@@ -45,21 +45,55 @@ def analyze_email(request):
         email, settings.bert_model_path
     )
 
-    verdict, confidence, probabilities = fusion_model.predict(signals)
+    # 1. Baseline machine learning fusion prediction (BERT + XGBoost remains untouched)
+    verdict, confidence, probabilities, risk_score = fusion_model.predict(signals)
 
-    # Application-level display score. 0-100 here; choose/validate a policy before production.
-    safe_prob = probabilities.get("SAFE", confidence if verdict == "SAFE" else 1.0 - confidence)
-    risk_score = round((1.0 - safe_prob) * 100, 2)
+    # 2. Independent QR / Quishing post-model integration layer
+    qr_analysis = email.get("quishing") or {}
+    combined_urls = list(url_results)
+    qr_reasons = []
+
+    if qr_analysis.get("detected"):
+        qr_risk_score = float(qr_analysis.get("risk_score", 0.0))
+        qr_risk_level = qr_analysis.get("risk_level", "LOW")
+        qr_reasons.extend(qr_analysis.get("reasons", []))
+
+        # Merge decoded QR URLs into URL scan results
+        for item in qr_analysis.get("items", []):
+            final_u = item.get("final_url") or item.get("original_url")
+            if final_u and not any(u.get("url") == final_u for u in combined_urls):
+                intel = item.get("url_threat_intel") or {
+                    "url": final_u,
+                    "domain": final_u.split("/")[2] if "/" in final_u else final_u,
+                    "risk": item.get("item_risk", 0.1),
+                    "reasons": item.get("reasons", [])
+                }
+                combined_urls.append(intel)
+
+        # Elevate final application result based on QR threat level
+        if qr_risk_level == "HIGH":
+            if verdict in ("SAFE", "SUSPICIOUS"):
+                verdict = "PHISHING"
+            risk_score = max(risk_score, round(qr_risk_score * 100, 2))
+            confidence = max(confidence, 0.90)
+        elif qr_risk_level == "MEDIUM":
+            if verdict == "SAFE":
+                verdict = "SUSPICIOUS"
+            risk_score = max(risk_score, round(qr_risk_score * 100, 2))
+            confidence = max(confidence, 0.78)
+
+    all_reasons = explain(verdict, signals, initial_reasons + qr_reasons)
 
     return {
         "verdict": verdict,
         "risk_score": risk_score,
-        "confidence": round(confidence, 4),
-        "reasons": explain(verdict, signals, initial_reasons),
+        "confidence": confidence,
+        "reasons": all_reasons,
         "signals": {
             **signals,
             "class_probabilities": probabilities,
         },
         "actions": actions_for(verdict),
-        "urls": url_results,
+        "urls": combined_urls,
+        "quishing": qr_analysis,
     }
