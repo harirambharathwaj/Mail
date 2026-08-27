@@ -48,7 +48,8 @@ def analyze_email(request):
     verdict, confidence, probabilities = fusion_model.predict(signals)
 
     # Application-level display score. 0-100 here; choose/validate a policy before production.
-    risk_score = round(confidence * 100, 2)
+    safe_prob = probabilities.get("SAFE", confidence if verdict == "SAFE" else 1.0 - confidence)
+    risk_score = round((1.0 - safe_prob) * 100, 2)
 
     return {
         "verdict": verdict,
