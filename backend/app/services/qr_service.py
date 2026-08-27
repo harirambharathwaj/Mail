@@ -1,6 +1,6 @@
 import base64
 from typing import List, Dict, Any, Optional
-from .qr_scanner import scan_image_bytes, scan_pdf_bytes, scan_base64_or_inline_image, determine_payload_type
+from .qr_scanner import scan_image_bytes, scan_pdf_bytes, scan_base64_or_inline_image, determine_payload_type, extract_embedded_urls
 from .qr_resolver import resolve_redirects
 from .threat_intel import analyze_url
 from .qr_risk import evaluate_qr_item_risk, calculate_overall_qr_risk
@@ -14,7 +14,13 @@ def process_single_qr(raw_qr_item: Dict[str, Any]) -> Dict[str, Any]:
     payload = raw_qr_item.get("payload", "")
     payload_type = raw_qr_item.get("payload_type", determine_payload_type(payload))
     
-    original_url = payload if payload_type in ("http_url", "https_url", "url") else None
+    embedded_urls = extract_embedded_urls(payload)
+    
+    original_url = payload if payload_type in ("http_url", "https_url", "url") and payload.lower().startswith(("http://", "https://", "www.")) else (embedded_urls[0] if embedded_urls else None)
+    if embedded_urls and not original_url:
+        original_url = embedded_urls[0]
+        payload_type = "url"
+
     final_url = original_url
     redirect_chain = [original_url] if original_url else []
     redirect_count = 0
@@ -22,7 +28,7 @@ def process_single_qr(raw_qr_item: Dict[str, Any]) -> Dict[str, Any]:
     resolution_error = None
     url_intel = {}
 
-    # If payload is a URL, resolve redirects safely
+    # If payload is a URL or contains an embedded URL, resolve redirects safely
     if original_url:
         resolution = resolve_redirects(original_url)
         final_url = resolution.get("final_url", original_url)
@@ -33,6 +39,14 @@ def process_single_qr(raw_qr_item: Dict[str, Any]) -> Dict[str, Any]:
 
         # Invoke existing URL Threat Intelligence on final URL
         url_intel = analyze_url(final_url)
+        
+        # If final URL domain is safe/shortener but payload text contains another embedded URL (e.g. www.sbxic.com), analyze embedded target
+        if embedded_urls:
+            for emb_u in embedded_urls:
+                emb_intel = analyze_url(emb_u)
+                if float(emb_intel.get("risk", 0.0)) > float(url_intel.get("risk", 0.0)):
+                    url_intel = emb_intel
+                    final_url = emb_u
 
     item_record = {
         "source": raw_qr_item.get("source", "attachment"),
@@ -116,7 +130,7 @@ def analyze_email_quishing(
             img_qrs = scan_image_bytes(att_bytes, filename=att_name)
             detected_raw_qrs.extend(img_qrs)
 
-        # Check if attachment contains simulated_qr object (from demo UI templates)
+        # Check if attachment contains explicit simulated_qr object (from demo UI templates)
         elif isinstance(att, dict) and att.get("simulated_qr"):
             sim = att["simulated_qr"]
             detected_raw_qrs.append({
@@ -124,29 +138,11 @@ def analyze_email_quishing(
                 "filename": att_name,
                 "page": sim.get("page", 1 if att_name_lower.endswith(".pdf") else None),
                 "decoded": True,
-                "payload": sim.get("payload", "http://auth-qr-update.com/login"),
+                "payload": sim.get("payload", "https://mycompany.com/internal/portal"),
                 "payload_type": determine_payload_type(sim.get("payload", "")),
                 "bounding_box": [[100, 100], [300, 100], [300, 300], [100, 300]],
-                "ocr_text": sim.get("ocr_text", "Scan QR code to verify your identity."),
-                "context_intents": sim.get("context_intents", ["credential_verification", "urgency"])
-            })
-
-        # Handle attachment filename / body heuristic simulations (e.g. mfa_login_qr_code.png or invoice_qr.pdf in text demos)
-        elif not att_bytes and (any(kw in att_name_lower for kw in ["qr", "quishing", "mfa", "2fa", "security_notice", "auth"]) or "qr" in body.lower()):
-            is_pdf = att_name_lower.endswith(".pdf")
-            source_type = "pdf_attachment" if is_pdf else "attachment"
-            page_val = 1 if is_pdf else None
-            
-            detected_raw_qrs.append({
-                "source": source_type,
-                "filename": att_name,
-                "page": page_val,
-                "decoded": True,
-                "payload": "http://microsoft-support-login.com/auth/verify?id=928" if "microsoft" in body.lower() or "security" in att_name_lower else "http://auth-qr-update.com/login",
-                "payload_type": "http_url",
-                "bounding_box": [[100, 100], [300, 100], [300, 300], [100, 300]],
-                "ocr_text": "Scan QR code with your mobile authenticator app immediately to verify your identity.",
-                "context_intents": ["credential_verification", "urgency", "brand_impersonation"]
+                "ocr_text": sim.get("ocr_text", "Scan QR code to access corporate service."),
+                "context_intents": sim.get("context_intents", [])
             })
 
     # Process all detected QR items through SSRF-safe resolver & threat intel

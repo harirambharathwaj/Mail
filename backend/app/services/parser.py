@@ -74,6 +74,22 @@ def parse_email(sender, recipient, subject, body, headers, attachments):
             "items": []
         }
 
+    # Invoke Language Identification (LID)
+    try:
+        from .language_id import detect_language
+        lang_analysis = detect_language(full_text)
+    except Exception as e:
+        lang_analysis = {
+            "language": "unknown",
+            "languages": ["unknown"],
+            "script": "unknown",
+            "code_mixed": False,
+            "transliterated": False,
+            "confidence": 0.50,
+            "detected_markers": [],
+            "summary": f"Language ID error: {str(e)}"
+        }
+
     return {
         "sender": sender_str,
         "recipient": recipient_str,
@@ -83,4 +99,5 @@ def parse_email(sender, recipient, subject, body, headers, attachments):
         "urls": extract_urls(full_text),
         "attachments": norm_attachments,
         "quishing": qr_analysis,
+        "regional": lang_analysis,
     }

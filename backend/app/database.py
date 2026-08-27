@@ -23,6 +23,7 @@ class Analysis(Base):
     signals = Column(Text, nullable=False)
     actions = Column(Text, nullable=False)
     qr_analysis = Column(Text, nullable=True)
+    regional_analysis = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class QRScan(Base):
@@ -45,10 +46,15 @@ class QRScan(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
-    # Automatically add missing column to existing SQLite database if needed
+    # Automatically add missing columns to existing SQLite database if needed
     with engine.connect() as conn:
         try:
             conn.execute(text("ALTER TABLE analyses ADD COLUMN qr_analysis TEXT"))
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE analyses ADD COLUMN regional_analysis TEXT"))
             conn.commit()
         except Exception:
             pass
@@ -66,6 +72,7 @@ def save_analysis(request, result):
             signals=json.dumps(result["signals"]),
             actions=json.dumps(result["actions"]),
             qr_analysis=json.dumps(result.get("quishing") or {}),
+            regional_analysis=json.dumps(result.get("regional") or {}),
         )
         db.add(row)
         db.commit()

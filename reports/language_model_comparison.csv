@@ -1,0 +1,7 @@
+language_category,samples,muril_precision,muril_recall,muril_f1,bert_precision,bert_recall,bert_f1,f1_improvement
+Hindi Native,1,1.0,1.0,1.0,1.0,1.0,1.0,0.0
+Tamil Native,2,1.0,1.0,1.0,0.25,0.5,0.3333,0.6667
+Hinglish (Code-Mixed),4,1.0,1.0,1.0,1.0,1.0,1.0,0.0
+Tanglish (Code-Mixed),3,0.4444,0.6667,0.5333,0.8333,0.6667,0.6667,-0.1333
+Romanized Hindi,3,1.0,0.6667,0.8,1.0,1.0,1.0,-0.2
+Romanized Tamil,2,1.0,1.0,1.0,1.0,1.0,1.0,0.0

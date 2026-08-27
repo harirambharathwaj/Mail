@@ -1,0 +1,7 @@
+system,scope,tp,fp,tn,fn,matrix
+BERT Only,Test Set,9,8,0,0,"[[0, 8], [0, 9]]"
+XGBoost Only,Test Set,9,0,8,0,"[[8, 0], [0, 9]]"
+Fusion (Alpha=0.00),Test Set,9,0,8,0,"[[8, 0], [0, 9]]"
+BERT Only,Full Dataset,19,15,0,0,"[[0, 15], [0, 19]]"
+XGBoost Only,Full Dataset,19,0,15,0,"[[15, 0], [0, 19]]"
+Fusion (Alpha=0.00),Full Dataset,19,0,15,0,"[[15, 0], [0, 19]]"

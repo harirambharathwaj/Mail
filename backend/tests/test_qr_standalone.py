@@ -191,3 +191,19 @@ def test_threat_intel_unconfigured():
 def test_url_timeout_handling():
     res = resolve_redirects("https://10.255.255.1", timeout=0.5)
     assert res["resolution_success"] is False
+
+# 16. Embedded text URL with banking brand typosquatting (e.g. hello this is url website is www.sbxic.com)
+def test_embedded_url_typosquatting_qr():
+    img_bytes = create_test_qr_bytes("hello this is url website is www.sbxic.com")
+    response = client.post(
+        "/api/qr/analyze",
+        files={"file": ("embedded_qr.png", img_bytes, "image/png")}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["qr_detected"] is True
+    assert data["risk_level"] in ("SUSPICIOUS", "PHISHING")
+    assert data["risk_score"] >= 0.60
+    assert any("brand" in r.lower() or "typosquatting" in r.lower() or "lookalike" in r.lower() for r in data["reasons"])
+

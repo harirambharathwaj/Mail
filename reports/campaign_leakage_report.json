@@ -1,0 +1,29 @@
+{
+  "campaign_level_split": true,
+  "total_campaigns": 12,
+  "total_events": 27,
+  "total_pairwise_combinations": 135,
+  "train_campaigns": [
+    "BENIGN_002_BANK_ALERT",
+    "CAMP_002_TNEB_POWER",
+    "CAMP_001_SBI_KYC",
+    "CAMP_004_HDFC_REWARDS",
+    "BENIGN_001_CORP_SYNC",
+    "CAMP_003_M365_MFA"
+  ],
+  "val_campaigns": [
+    "CAMP_007_JOB_SCAM",
+    "CAMP_005_AIRTEL_SIM",
+    "CAMP_006_IT_REFUND"
+  ],
+  "test_campaigns": [
+    "CAMP_010_PM_KISAN",
+    "CAMP_008_NETFLIX",
+    "CAMP_009_PAYTM_QR"
+  ],
+  "train_pairs_count": 105,
+  "val_pairs_count": 15,
+  "test_pairs_count": 15,
+  "train_test_group_overlap": 0,
+  "zero_campaign_leakage_guaranteed": true
+}

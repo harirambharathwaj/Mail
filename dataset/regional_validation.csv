@@ -1,0 +1,31 @@
+subject,body,text,language,script,code_mixed,transliterated,label,origin_type,template_group
+गूगल पे सुरक्षा चेतावनी: संदिग्ध लेनदेन,"सावधान: आपके गूगल पे खाते से 10,000 रुपये का अनधिकृत लेनदेन दर्ज हुआ है। यदि यह आप नहीं हैं तो तुरंत रद्द करें: http://gpay-fraud-cancel.xyz","गूगल पे सुरक्षा चेतावनी: संदिग्ध लेनदेन
+सावधान: आपके गूगल पे खाते से 10,000 रुपये का अनधिकृत लेनदेन दर्ज हुआ है। यदि यह आप नहीं हैं तो तुरंत रद्द करें: http://gpay-fraud-cancel.xyz",hi,devanagari,False,False,1,real_curated,upi_fraud_hi_04
+पीएम आवास योजना अनुदान सूचना,सरकारी योजना: प्रधानमंत्री आवास योजना के तहत आपको अनुदान मिला है। दावा करने के लिए आधार लिंक करें: http://pm-yojana-grant.info,"पीएम आवास योजना अनुदान सूचना
+सरकारी योजना: प्रधानमंत्री आवास योजना के तहत आपको अनुदान मिला है। दावा करने के लिए आधार लिंक करें: http://pm-yojana-grant.info",hi,devanagari,False,False,1,real_curated,gov_scheme_hi_08
+खाता जमा सूचना,"प्रिय ग्राहक, आपके बचत खाते में 5,000 रुपये जमा किए गए हैं। शेष राशि जांचने के लिए हमारे आधिकारिक ऐप का उपयोग करें।","खाता जमा सूचना
+प्रिय ग्राहक, आपके बचत खाते में 5,000 रुपये जमा किए गए हैं। शेष राशि जांचने के लिए हमारे आधिकारिक ऐप का उपयोग करें।",hi,devanagari,False,False,0,real_curated,legit_bank_hi_01
+परीक्षा परिणाम घोषणा,"प्रिय छात्र, आपकी सेमेस्टर परीक्षा का परिणाम आधिकारिक पोर्टल पर घोषित कर दिया गया है।","परीक्षा परिणाम घोषणा
+प्रिय छात्र, आपकी सेमेस्टर परीक्षा का परिणाम आधिकारिक पोर्टल पर घोषित कर दिया गया है।",hi,devanagari,False,False,0,real_curated,legit_edu_hi_04
+Paytm security alert,Security Notice: Aapke Paytm account se suspicious transaction detect hui hai. Cancel karne ke liye link open karein: http://paytm-security.top,"Paytm security alert
+Security Notice: Aapke Paytm account se suspicious transaction detect hui hai. Cancel karne ke liye link open karein: http://paytm-security.top",hi+en,latin,True,True,1,synthetic_augmented,hinglish_phish_04
+Lucky draw prize alert,Congratulations! Aapne lucky draw me Rs 25 Lakh jeeta hai. Claim karne ke liye OTP share karein.,"Lucky draw prize alert
+Congratulations! Aapne lucky draw me Rs 25 Lakh jeeta hai. Claim karne ke liye OTP share karein.",hi+en,latin,True,True,1,synthetic_augmented,hinglish_phish_05
+Cab booking confirmation,Your cab booking has been confirmed for 6:00 PM today. Driver details SMS pe aayenge.,"Cab booking confirmation
+Your cab booking has been confirmed for 6:00 PM today. Driver details SMS pe aayenge.",hi+en,latin,True,True,0,real_curated,legit_hinglish_08
+TNEB electricity bill payment alert,EB bill pending irukku. Inaiku night power cut aagidum. Pay panna link click pannunga: http://tneb-bill-pay.xyz,"TNEB electricity bill payment alert
+EB bill pending irukku. Inaiku night power cut aagidum. Pay panna link click pannunga: http://tneb-bill-pay.xyz",ta+en,latin,True,True,1,synthetic_augmented,tanglish_phish_02
+Medical insurance update form,Health insurance update form HR portal la open aayiduchu. Ellarum submit pannunga.,"Medical insurance update form
+Health insurance update form HR portal la open aayiduchu. Ellarum submit pannunga.",ta+en,latin,True,True,0,real_curated,legit_tanglish_04
+gpay fraud alert,apke gpay account me fraud transaction hua hai. turant cancel karein: http://gpay-cancel.site,"gpay fraud alert
+apke gpay account me fraud transaction hua hai. turant cancel karein: http://gpay-cancel.site",hi,latin,False,True,1,augmented_transliteration,rom_hi_phish_04
+lottery jeet notice,badhai ho! lottery me 10 lakh rupaye jeete hain. lene ke liye otp aur bank details bhejein.,"lottery jeet notice
+badhai ho! lottery me 10 lakh rupaye jeete hain. lene ke liye otp aur bank details bhejein.",hi,latin,False,True,1,augmented_transliteration,rom_hi_phish_05
+salary hold warning,salary hold ho gayi hai. pan aur password verify karein: http://payroll-login.net,"salary hold warning
+salary hold ho gayi hai. pan aur password verify karein: http://payroll-login.net",hi,latin,False,True,1,augmented_transliteration,rom_hi_phish_07
+credit card block alert,credit card block hone wala hai. turant unblock karein: http://card-unblock.xyz,"credit card block alert
+credit card block hone wala hai. turant unblock karein: http://card-unblock.xyz",hi,latin,False,True,1,augmented_transliteration,rom_hi_phish_08
+holi holiday notice,office holi holiday 25 march ko rahega. sabhi ko shubhkaamnaye.,"holi holiday notice
+office holi holiday 25 march ko rahega. sabhi ko shubhkaamnaye.",hi,latin,False,True,0,real_curated,legit_rom_hi_03
+salary hold warning,salary hold aagirukku. pan card details submit pannunga: http://salary-login.net,"salary hold warning
+salary hold aagirukku. pan card details submit pannunga: http://salary-login.net",ta,latin,False,True,1,augmented_transliteration,rom_ta_phish_07

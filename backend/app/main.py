@@ -100,11 +100,113 @@ async def analyze_uploaded_qr(file: UploadFile = File(...)):
 def get_qr_scans(limit: int = 50):
     return get_recent_qr_scans(limit)
 
+class RegionalAnalyzeRequest(BaseModel):
+    text: Optional[str] = ""
+    subject: Optional[str] = ""
+    body: Optional[str] = ""
+
+@app.post("/api/analyze/regional")
+def analyze_regional_endpoint(request: RegionalAnalyzeRequest):
+    combined = request.text or f"{request.subject or ''}\n{request.body or ''}"
+    from .services.language_id import detect_language
+    from .services.muril_model import get_muril
+    
+    lang_info = detect_language(combined)
+    muril = get_muril()
+    muril_res = muril.predict(combined, lang_meta=lang_info)
+    
+    return {
+        "text": combined[:200],
+        "language_identification": lang_info,
+        "regional_model": {
+            "model_name": "google/muril-base-cased",
+            "muril_probability": muril_res["muril_probability"],
+            "confidence": muril_res["confidence"],
+            "detected_intent": muril_res["detected_intent"],
+            "evidence": muril_res["evidence"],
+            "explanation": muril_res["explanation"]
+        }
+    }
+
 @app.get("/api/alerts")
-def alerts(limit: int = 50):
+def alerts(limit: int = 20):
     return get_recent(limit)
 
-@app.get("/api/stats")
-def stats():
+@app.get("/api/metrics")
+def metrics():
     return get_stats()
+
+from .services.campaign.campaign_schema import CampaignAnalyzeRequest, CampaignAnalyzeResponse
+from .services.campaign.campaign_service import analyze_campaigns
+
+@app.post("/api/campaign/analyze", response_model=CampaignAnalyzeResponse)
+def analyze_campaign_endpoint(request: CampaignAnalyzeRequest):
+    return analyze_campaigns(request)
+
+@app.get("/api/campaign/datasets")
+def get_campaign_test_datasets():
+    """Provides pre-validated authorized multi-channel campaign dataset scenarios for testing."""
+    return [
+        {
+            "scenario_id": "SCENARIO_BANK_001",
+            "name": "SBI / ICICI Banking Credential Harvest Campaign",
+            "description": "Cross-channel campaign targeting banking users via Email, SMS shortlink, and WhatsApp QR lure.",
+            "events": [
+                {
+                    "event_id": "EVT_EML_01",
+                    "channel": "email",
+                    "timestamp": "2026-08-28T10:01:00Z",
+                    "sender": "security@sbxic-verify.com",
+                    "subject": "Urgent SBI-ICICI Account Verification Required",
+                    "body": "Dear Customer, unusual activity detected. Scan QR or verify at https://sbxic.com/verify-account",
+                    "urls": ["https://sbxic.com/verify-account"],
+                    "data_origin": "real"
+                },
+                {
+                    "event_id": "EVT_SMS_02",
+                    "channel": "sms",
+                    "timestamp": "2026-08-28T10:08:00Z",
+                    "sender": "+919876543210",
+                    "body": "Urgent: SBI account blocked! Verify your KYC immediately at https://sbxic.com/verify-account",
+                    "urls": ["https://sbxic.com/verify-account"],
+                    "data_origin": "real"
+                },
+                {
+                    "event_id": "EVT_WA_03",
+                    "channel": "whatsapp",
+                    "timestamp": "2026-08-28T10:19:00Z",
+                    "sender": "Bank Support Team",
+                    "body": "Aapka account block ho gaya hai. Fast KYC update: https://sbxic.com/verify-account",
+                    "urls": ["https://sbxic.com/verify-account"],
+                    "data_origin": "synthetic"
+                }
+            ]
+        },
+        {
+            "scenario_id": "SCENARIO_BEC_002",
+            "name": "Executive BEC & Wire Transfer Campaign",
+            "description": "Targeted Spear-Phishing campaign impersonating CEO via HR Email and SMS urgency message.",
+            "events": [
+                {
+                    "event_id": "EVT_EML_04",
+                    "channel": "email",
+                    "timestamp": "2026-08-28T14:00:00Z",
+                    "sender": "ceo-update@mycompany-internal.com",
+                    "subject": "Confidential Urgent Invoice Wire Transfer",
+                    "body": "Payroll team, process this overdue invoice immediately: https://vendor-payroll-sync.com/invoice",
+                    "urls": ["https://vendor-payroll-sync.com/invoice"],
+                    "data_origin": "real"
+                },
+                {
+                    "event_id": "EVT_SMS_05",
+                    "channel": "sms",
+                    "timestamp": "2026-08-28T14:12:00Z",
+                    "sender": "+12025550198",
+                    "body": "CEO Alert: I sent an urgent email. Process the invoice at https://vendor-payroll-sync.com/invoice now.",
+                    "urls": ["https://vendor-payroll-sync.com/invoice"],
+                    "data_origin": "synthetic"
+                }
+            ]
+        }
+    ]
 

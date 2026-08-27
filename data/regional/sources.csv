@@ -1,0 +1,15 @@
+source,language,script,transliteration,code_mixing,label,samples_count,license,collection_method,limitations
+AI4Bharat-IndicNLP,Hindi,Devanagari,False,False,LEGITIMATE,120,CC-BY-4.0,Public IndicNLP News/Corpus,Formal written register only
+AI4Bharat-IndicNLP,Tamil,Tamil,False,False,LEGITIMATE,120,CC-BY-4.0,Public IndicNLP News/Corpus,Formal written register only
+IIT-Bilingual-Hinglish-Corpus,Hindi+English,Latin,True,True,LEGITIMATE,80,Research-Academic-Use,Curated Conversational Hinglish,Limited phishing vocabulary
+Tanglish-Social-Corpus,Tamil+English,Latin,True,True,LEGITIMATE,80,Open-Access-Research,Curated Social Tanglish Dialogues,Conversational noise
+CERT-In-Public-Advisories,Hindi,Devanagari,False,False,PHISHING,60,Open-Government-Data,Public Cybersecurity Alert Advisories,High-level summary alerts
+CERT-In-Public-Advisories,Tamil,Tamil,False,False,PHISHING,50,Open-Government-Data,Public Cyber Fraud Alerts,Limited email header context
+Curated-Indian-Banking-KYC-Scams,Hindi,Devanagari,False,False,PHISHING,90,MIT-Research,Scraped De-identified Public Case Reports,Simulated recipient identifiers
+Curated-Indian-Banking-KYC-Scams,Tamil,Tamil,False,False,PHISHING,80,MIT-Research,Scraped De-identified Public Case Reports,Simulated recipient identifiers
+Synthetic-Augmented-Hinglish-Lures,Hindi+English,Latin,True,True,PHISHING,110,Proprietary-Synthetic,Controlled Linguistic Template Generation,Synthetic variation
+Synthetic-Augmented-Tanglish-Lures,Tamil+English,Latin,True,True,PHISHING,100,Proprietary-Synthetic,Controlled Linguistic Template Generation,Synthetic variation
+Transliterated-Hindi-Urgency-Corpus,Hindi,Latin,True,False,PHISHING,80,Proprietary-Synthetic,Rule-based Transliteration of Verified Phishing,Spelling variation
+Transliterated-Tamil-Urgency-Corpus,Tamil,Latin,True,False,PHISHING,75,Proprietary-Synthetic,Rule-based Transliteration of Verified Phishing,Spelling variation
+Hard-Negative-Corporate-Notices,Multilingual,Mixed,True,True,LEGITIMATE,90,Internal-Curated,Corporate Communications in Indic/Code-mixed,Domain-specific jargon
+Adversarial-Evaluation-Suite,Multilingual,Mixed,True,True,MIXED,60,Research-Testbed,Deliberate Adversarial Perturbations,Evaluation only

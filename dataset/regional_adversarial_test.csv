@@ -1,0 +1,9 @@
+subject,body,language,script,code_mixed,transliterated,label,test_type
+Urgent acc block,"Aapka acc block ho jayega, pls verify now: http://kyc-update.xyz",hi+en,latin,True,True,1,abbreviation_variation
+EB bill payment,eb bill pay pannunga pls illana current cut: http://tneb.xyz,ta+en,latin,True,True,1,informal_tanglish
+खाता सत्यापन,आपका खाता सत्यापित करें अभी तुरंत: http://sbi.xyz,hi,devanagari,False,False,1,short_native
+கணக்கு சரிபார்ப்பு,உங்கள் கணக்கை உடனே சரிபார்க்கவும்: http://canara.xyz,ta,tamil,False,False,1,short_native
+HR Onboarding KYC,Please complete your official employee KYC verification on the company intranet portal.,en,latin,False,False,0,hard_negative_en
+एचआर ऑनबोर्डिंग केवाईसी,कृपया अपने नए कर्मचारी दस्तावेज सत्यापन के लिए मूल आधार कार्ड कार्यालय में प्रस्तुत करें।,hi,devanagari,False,False,0,hard_negative_hi
+பணியாளர் சரிபார்ப்பு,புதிய ஊழியர்கள் தங்கள் சான்றிதழ்களை அலுவலகத்தில் சரிபார்க்க சமர்ப்பிக்கவும்.,ta,tamil,False,False,0,hard_negative_ta
+Bank OTP alert,Your OTP for Rs 500 at Swiggy is 482019. Do not share OTP with anyone.,en,latin,False,False,0,hard_negative_otp

@@ -1,3 +1,4 @@
+import re
 from email.utils import parseaddr
 from .bert_model import get_bert
 from .threat_intel import analyze_url
@@ -36,6 +37,12 @@ KNOWN_BRANDS = {
     "irs-gov": ["irs.gov"],
     "netflix": ["netflix.com"],
     "hdfc": ["hdfcbank.com"],
+    "sbi": ["sbi.co.in", "onlinesbi.sbi", "onlinesbi.com"],
+    "icici": ["icicibank.com"],
+    "axis": ["axisbank.com"],
+    "paytm": ["paytm.com"],
+    "whatsapp": ["whatsapp.com"],
+    "telegram": ["telegram.org"],
     "chase": ["chase.com"],
     "wellsfargo": ["wellsfargo.com"],
 }
@@ -164,11 +171,16 @@ def analyze_headers(sender, recipient, headers):
 
     return min(1.0, round(score, 4)), reasons
 
-def analyze_body(text, model_path):
-    model = get_bert(model_path)
-    score = model.predict(text)
+def analyze_body(text, model_path, regional_meta=None):
+    from .muril_model import get_muril
+    
+    lang_info = regional_meta or {}
+    lang = lang_info.get("language", "en")
+    is_code_mixed = lang_info.get("code_mixed", False)
+    is_translit = lang_info.get("transliterated", False)
+    
     reasons = []
-    low = text.lower()
+    low = str(text or "").lower()
 
     if any(x in low for x in URGENT_TERMS):
         reasons.append("Urgent or threatening language detected")
@@ -179,7 +191,27 @@ def analyze_body(text, model_path):
     if any(x in low for x in DATA_EXPOSURE_TERMS):
         reasons.append("Account or data exposure language detected")
 
-    return score, reasons
+    # Language-aware Semantic Model Routing
+    if lang in ["hi", "ta", "hi+en", "ta+en"] or is_code_mixed or is_translit:
+        muril = get_muril()
+        res = muril.predict(text, lang_meta=lang_info)
+        reasons.extend(res.get("evidence", []))
+        return res["muril_probability"], list(dict.fromkeys(reasons)), "MuRIL", res
+    elif lang == "en":
+        model = get_bert(model_path)
+        score = model.predict(text)
+        return score, reasons, "English BERT", None
+    else:
+        # Uncertain / Mixed: evaluate both models safely
+        model = get_bert(model_path)
+        bert_score = model.predict(text)
+        muril = get_muril()
+        muril_res = muril.predict(text, lang_meta=lang_info)
+        
+        if muril_res["muril_probability"] > bert_score:
+            reasons.extend(muril_res.get("evidence", []))
+            return muril_res["muril_probability"], list(dict.fromkeys(reasons)), "MuRIL (Fallback)", muril_res
+        return bert_score, reasons, "English BERT", muril_res
 
 def analyze_attachments(attachments, quishing_meta=None):
     risk = 0.0
@@ -199,25 +231,46 @@ def analyze_attachments(attachments, quishing_meta=None):
                 reasons.append(f"Potentially dangerous executable/script attachment type: {ext}")
 
     if quishing_meta and quishing_meta.get("detected"):
-        risk = max(risk, 0.75)
-        reasons.extend(quishing_meta.get("reasons", []))
+        qr_r = float(quishing_meta.get("risk_score", 0.0))
+        if qr_r >= 0.50:
+            risk = max(risk, min(1.0, qr_r))
+            reasons.extend(quishing_meta.get("reasons", []))
 
     return min(1.0, risk), reasons
 
 def analyze_sender_behavior(sender, headers):
-    # Prototype: use explicit behavior_anomaly if supplied.
-    if isinstance(headers, dict) and headers.get("behavior_anomaly") is not None:
-        try:
-            return float(headers["behavior_anomaly"]), ["Sender behavior marked anomalous"]
-        except (ValueError, TypeError):
-            pass
+    # Support dictionary, string, custom_data, and key variations
+    if isinstance(headers, dict):
+        for key in ["behavior_anomaly", "behavior", "anomaly", "sender_behavior", "sender_behavior_score", "anomaly_score"]:
+            if key in headers and headers[key] is not None:
+                try:
+                    return min(1.0, max(0.0, float(headers[key]))), ["Sender historical behavior anomaly flagged"]
+                except (ValueError, TypeError):
+                    pass
+        # Check stringified custom data inside dict
+        for v in headers.values():
+            if isinstance(v, str) and "behavior" in v.lower():
+                match = re.search(r'["\']?(?:behavior_anomaly|behavior|anomaly)["\']?\s*[:=]\s*["\']?([0-9.]+)', v, re.I)
+                if match:
+                    try:
+                        return min(1.0, max(0.0, float(match.group(1)))), ["Sender historical behavior anomaly flagged"]
+                    except ValueError:
+                        pass
+    elif isinstance(headers, str) and headers.strip():
+        match = re.search(r'["\']?(?:behavior_anomaly|behavior|anomaly)["\']?\s*[:=]\s*["\']?([0-9.]+)', headers, re.I)
+        if match:
+            try:
+                return min(1.0, max(0.0, float(match.group(1)))), ["Sender historical behavior anomaly flagged"]
+            except ValueError:
+                pass
+
     return 0.0, []
 
 def build_signals(email, model_path):
     combined_text = f"{email.get('subject', '')}\n{email.get('body', '')}"
 
     header_score, header_reasons = analyze_headers(email.get("sender", ""), email.get("recipient", ""), email.get("headers", {}))
-    nlp_score, body_reasons = analyze_body(combined_text, model_path)
+    nlp_score, body_reasons, model_used, muril_details = analyze_body(combined_text, model_path, regional_meta=email.get("regional"))
     attachment_score, attachment_reasons = analyze_attachments(email.get("attachments", []), email.get("quishing"))
     behavior_score, behavior_reasons = analyze_sender_behavior(email.get("sender", ""), email.get("headers", {}))
 
@@ -241,4 +294,18 @@ def build_signals(email, model_path):
         "sender_behavior_score": round(float(behavior_score), 4),
     }
 
-    return signals, reasons, url_results
+    # Enrich regional payload
+    regional_payload = dict(email.get("regional", {}))
+    regional_payload["semantic_model_used"] = model_used
+    if muril_details:
+        regional_payload["muril_probability"] = muril_details.get("muril_probability", round(float(nlp_score), 4))
+        regional_payload["detected_intent"] = muril_details.get("detected_intent", "General")
+        regional_payload["evidence"] = muril_details.get("evidence", [])
+        regional_payload["explanation"] = muril_details.get("explanation", "")
+    else:
+        regional_payload["muril_probability"] = round(float(nlp_score), 4)
+        regional_payload["detected_intent"] = "English Standard Semantic Evaluation"
+        regional_payload["evidence"] = body_reasons
+        regional_payload["explanation"] = "Evaluated via Primary English BERT Classifier."
+
+    return signals, reasons, url_results, regional_payload

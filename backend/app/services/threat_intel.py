@@ -108,23 +108,40 @@ def analyze_url(url: str):
         heuristic += 0.10
         reasons.append("Domain uses hyphenated words often seen in impersonation URLs")
 
-    known_brands = ["microsoft", "office365", "paypal", "google", "apple", "amazon", "hdfc"]
-    if any(brand in domain for brand in known_brands) and not domain.endswith((
-        "microsoft.com",
-        "office.com",
-        "paypal.com",
-        "google.com",
-        "apple.com",
-        "amazon.com",
-        "hdfcbank.com",
-    )):
-        heuristic += 0.20
-        reasons.append("Domain appears to impersonate a known brand")
+    known_brand_domains = {
+        "microsoft": ["microsoft.com", "office.com", "office365.com", "live.com", "msn.com"],
+        "google": ["google.com", "gmail.com", "googlemail.com"],
+        "apple": ["apple.com", "icloud.com"],
+        "paypal": ["paypal.com"],
+        "amazon": ["amazon.com", "aws.amazon.com"],
+        "hdfc": ["hdfcbank.com"],
+        "sbi": ["sbi.co.in", "onlinesbi.sbi", "onlinesbi.com"],
+        "icici": ["icicibank.com"],
+        "axis": ["axisbank.com"],
+        "paytm": ["paytm.com"],
+        "chase": ["chase.com"],
+        "wellsfargo": ["wellsfargo.com"],
+    }
 
-    typo_domains = {"hdfe.com", "hdfc.com"}
-    if domain.removeprefix("www.") in typo_domains:
-        heuristic += 0.25
-        reasons.append("Domain resembles a banking brand or typo-squatted site")
+    matched_brand = None
+    for brand, legit_domains in known_brand_domains.items():
+        if brand in domain:
+            if not any(domain == legit or domain.endswith("." + legit) for legit in legit_domains):
+                heuristic += 0.40
+                reasons.append(f"Domain '{domain}' impersonates brand '{brand.upper()}' from an unauthorized domain")
+                matched_brand = brand
+                break
+
+    clean_dom = domain.removeprefix("www.")
+    # Check typosquatting / lookalike heuristics (e.g. sbxic, hdfe, sbi-login)
+    typo_targets = ["sbi", "icici", "hdfc", "axis", "paytm", "paypal", "chase"]
+    if not matched_brand:
+        for b in typo_targets:
+            # Check if brand substring combined with suspicious letters (e.g. sbxic contains sbi + icici or sbx)
+            if (b in clean_dom or "sbi" in clean_dom or "icici" in clean_dom or "sbx" in clean_dom) and not any(clean_dom.endswith(legit) for legit in known_brand_domains.get(b, [])):
+                heuristic += 0.45
+                reasons.append(f"Domain '{domain}' exhibits banking brand lookalike or typosquatting characteristics ({b.upper()})")
+                break
 
     vt = check_virustotal(url)
     sb = check_safe_browsing(url)

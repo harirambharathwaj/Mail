@@ -41,7 +41,7 @@ def analyze_email(request):
         request.attachments,
     )
 
-    signals, initial_reasons, url_results = build_signals(
+    signals, initial_reasons, url_results, regional_payload = build_signals(
         email, settings.bert_model_path
     )
 
@@ -96,4 +96,5 @@ def analyze_email(request):
         "actions": actions_for(verdict),
         "urls": combined_urls,
         "quishing": qr_analysis,
+        "regional": regional_payload,
     }

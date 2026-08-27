@@ -1,0 +1,12 @@
+{
+  "dataset_total": 100,
+  "train_samples": 70,
+  "val_samples": 15,
+  "test_samples": 15,
+  "adversarial_samples": 8,
+  "unique_template_groups": 100,
+  "leakage_train_val_overlap_count": 0,
+  "leakage_train_test_overlap_count": 0,
+  "leakage_val_test_overlap_count": 0,
+  "zero_template_leakage_guaranteed": true
+}

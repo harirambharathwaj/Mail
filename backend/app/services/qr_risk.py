@@ -199,13 +199,30 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
 
     # Non-URL payloads (e.g. plain_text, mailto, tel)
     if payload_type not in ("http_url", "https_url", "url") and not original_url.lower().startswith(("http://", "https://", "www.")):
+        from .qr_scanner import extract_ocr_context_intents
+        intents = extract_ocr_context_intents(payload)
         reasons = [f"QR code decoded payload type: {payload_type.upper()}"]
-        if payload_type == "plain_text":
-            reasons.append("Payload is plain text and does not contain web URLs")
-        elif payload_type == "mailto":
+        
+        text_risk = 0.05
+        low_p = payload.lower()
+        if "credential_verification" in intents or any(kw in low_p for kw in ["verify", "password", "login", "account", "mfa", "sso", "credentials"]):
+            text_risk += 0.55
+            reasons.append("Plain text QR payload demands sensitive credential, password, or account verification")
+        if "urgency" in intents or any(kw in low_p for kw in ["immediately", "suspended", "urgent", "within"]):
+            text_risk += 0.25
+            reasons.append("Urgent action or account suspension pressure detected in QR payload text")
+        if "payment_invoice" in intents or any(kw in low_p for kw in ["invoice", "payment", "wire", "bank"]):
+            text_risk += 0.20
+            reasons.append("Financial payment or bank transaction lure in QR payload text")
+        if payload_type == "mailto":
+            text_risk += 0.15
             reasons.append("QR code initiates automated mailto message dispatch")
         elif payload_type == "tel":
+            text_risk += 0.15
             reasons.append("QR code triggers direct telephone dialing intent")
+
+        final_t_risk = min(0.95, max(0.05, round(text_risk, 2)))
+        r_level = "PHISHING" if final_t_risk >= 0.80 else ("SUSPICIOUS" if final_t_risk >= 0.60 else ("LOW RISK" if final_t_risk >= 0.30 else "SAFE"))
 
         return {
             "success": True,
@@ -219,16 +236,16 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
             "final_url": payload,
             "resolution_success": True,
             "resolution_error": None,
-            "risk_score": 0.05,
-            "risk_level": "SAFE",
-            "message": f"QR decoded successfully. Payload type: {payload_type.upper()}. Phishing URL analysis is not applicable.",
+            "risk_score": final_t_risk,
+            "risk_level": r_level,
+            "message": f"QR decoded successfully. Payload type: {payload_type.upper()}.",
             "reasons": reasons,
             "breakdown": {
                 "url_structure": 0.0,
                 "redirect_risk": 0.0,
                 "threat_intel": 0.0,
-                "destination_risk": 0.0,
-                "overall": 0.05
+                "destination_risk": final_t_risk,
+                "overall": final_t_risk
             },
             "threat_intelligence": {
                 "virustotal": {"configured": False, "status": "not_configured", "malicious": False},
@@ -372,25 +389,24 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
     weighted_score = (
         0.30 * url_struct_score +
         0.20 * redirect_risk_score +
-        0.20 * intel_risk_score +
+        0.25 * intel_risk_score +
         0.15 * dest_risk_score +
-        0.15 * ml_prob
+        0.10 * ml_prob
     )
 
-    if is_known_qr_host and not found_keywords and is_https and not vt_malicious and not sb_malicious:
-        # Recognized QR host (e.g. me-qr.com, qrco.de, flowcode.com) hosting clean PDF/content
-        weighted_score = min(0.12, weighted_score)
+    if url_intel and float(url_intel.get("risk", 0.0)) > 0:
+        weighted_score = max(weighted_score, float(url_intel.get("risk", 0.0)))
 
     if vt_malicious or sb_malicious:
         weighted_score = max(0.92, weighted_score)
 
-    if url_struct_score >= 0.6 and redirect_risk_score >= 0.4 and not is_known_qr_host:
+    if url_struct_score >= 0.6 and redirect_risk_score >= 0.4:
         weighted_score = max(0.82, weighted_score)
 
     if redirect_count >= 2 and not is_known_qr_host:
         weighted_score = max(0.65, weighted_score)
 
-    if redirect_count >= 2 and (url_struct_score >= 0.3 or dest_risk_score >= 0.3) and not is_known_qr_host:
+    if redirect_count >= 2 and (url_struct_score >= 0.3 or dest_risk_score >= 0.3):
         weighted_score = max(0.85, weighted_score)
 
     overall_risk = min(1.0, max(0.02, round(weighted_score, 2)))
