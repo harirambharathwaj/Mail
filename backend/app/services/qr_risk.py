@@ -147,10 +147,40 @@ def calculate_overall_qr_risk(qr_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         "items": qr_items
     }
 
+import os
+import joblib
+from typing import List, Dict, Any, Tuple
+
+KNOWN_QR_DOMAINS = [
+    "me-qr.com", "q.me-qr.com", "qr1.me-qr.com", "qrco.de", "flowcode.com",
+    "qr-code-generator.com", "qr.io", "qr-code.io", "canva.com", "linktr.ee",
+    "drive.google.com", "docs.google.com", "dropbox.com", "onedrive.live.com",
+    "sharepoint.com", "adobe.com", "notion.so", "figma.com", "google.com",
+    "wikipedia.org", "github.com", "microsoft.com", "apple.com"
+]
+
+_QR_MODEL = None
+
+def _get_qr_model():
+    global _QR_MODEL
+    if _QR_MODEL is not None:
+        return _QR_MODEL
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    model_path = os.path.join(base_dir, "artifacts", "qr_detector_model.joblib")
+    if os.path.exists(model_path):
+        try:
+            _QR_MODEL = joblib.load(model_path)
+        except Exception as e:
+            print(f"Warning: Could not load QR ML model: {e}")
+            _QR_MODEL = False
+    else:
+        _QR_MODEL = False
+    return _QR_MODEL
+
 def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any]) -> Dict[str, Any]:
     """
     Computes standalone QR Phishing detector risk score, risk level, visual risk breakdown,
-    threat intelligence status, and explainable reasons.
+    threat intelligence status, and explainable reasons using trained ML model & multi-signal telemetry.
 
     Risk Levels & Thresholds:
       0.00 - 0.29 -> SAFE
@@ -217,14 +247,20 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
     url_low = target_url.lower()
     is_https = url_low.startswith("https://")
 
+    import urllib.parse
+    parsed = urllib.parse.urlparse(target_url)
+    domain = (parsed.netloc or "").lower()
+
+    orig_parsed = urllib.parse.urlparse(original_url)
+    orig_domain = (orig_parsed.netloc or "").lower()
+
+    # Check if host is a recognized legitimate QR service or document platform
+    is_known_qr_host = any(domain == d or domain.endswith("." + d) or orig_domain == d or orig_domain.endswith("." + d) for d in KNOWN_QR_DOMAINS)
+
     # 1. URL Structure Analysis
     if not is_https:
         url_struct_score += 0.35
         reasons.append("Unencrypted HTTP scheme detected (no TLS/SSL encryption)")
-
-    import urllib.parse
-    parsed = urllib.parse.urlparse(target_url)
-    domain = (parsed.netloc or "").lower()
 
     # Check for IP address instead of domain name
     import re
@@ -234,9 +270,9 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
 
     # Suspicious TLDs
     suspicious_tlds = [".xyz", ".top", ".work", ".club", ".info", ".biz", ".live", ".online", ".site", ".zip", ".mov", ".tk", ".ml", ".ga", ".cf", ".gq", ".icu"]
-    if any(domain.endswith(tld) for tld in suspicious_tlds):
+    if any(domain.endswith(tld) for tld in suspicious_tlds) and not is_known_qr_host:
         url_struct_score += 0.35
-        reasons.append(f"Destination domain uses high-risk suspicious TLD")
+        reasons.append("Destination domain uses high-risk suspicious TLD")
 
     # Credential/Login keywords in URL
     cred_keywords = ["login", "verify", "auth", "account", "signin", "password", "update", "secure", "mfa", "2fa", "bank", "pay", "invoice"]
@@ -248,28 +284,34 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
 
     # Impersonation hyphens or brand in subdomains
     known_brands = ["microsoft", "office365", "google", "apple", "paypal", "amazon", "docusign"]
-    if any(b in url_low for b in known_brands) and not any(domain.endswith("." + b + ".com") or domain == b + ".com" for b in known_brands):
+    if any(b in url_low for b in known_brands) and not is_known_qr_host and not any(domain.endswith("." + b + ".com") or domain == b + ".com" for b in known_brands):
         url_struct_score += 0.35
         dest_risk_score += 0.35
         reasons.append("Domain exhibits brand impersonation / typosquatting characteristics")
 
     # Excessively long URL
-    if len(target_url) > 100:
+    if len(target_url) > 120 and not is_known_qr_host:
         url_struct_score += 0.15
-        reasons.append("Excessively long URL structure detected (>100 chars)")
+        reasons.append("Excessively long URL structure detected (>120 chars)")
 
     # 2. Redirect Analysis
     if redirect_count >= 2:
-        redirect_risk_score += 0.85
-        reasons.append(f"Multiple HTTP redirects detected ({redirect_count} hops) hiding final destination")
+        if is_known_qr_host and not found_keywords and is_https:
+            # Normal internal routing for QR creation services (e.g. me-qr.com)
+            redirect_risk_score += 0.05
+            reasons.append("Normal redirect routing on recognized QR generator platform")
+        else:
+            redirect_risk_score += 0.85
+            reasons.append(f"Multiple HTTP redirects detected ({redirect_count} hops) hiding final destination")
     elif redirect_count == 1:
-        redirect_risk_score += 0.40
-        reasons.append("Single-hop HTTP redirect detected")
+        if is_known_qr_host:
+            redirect_risk_score += 0.02
+        else:
+            redirect_risk_score += 0.40
+            reasons.append("Single-hop HTTP redirect detected")
 
-    # Check for shorteners
+    # Check for generic URL shorteners (non-QR hosts)
     shortener_domains = ["bit.ly", "tinyurl.com", "t.co", "is.gd", "ow.ly", "buff.ly", "rebrand.ly", "cutt.ly"]
-    orig_parsed = urllib.parse.urlparse(original_url)
-    orig_domain = (orig_parsed.netloc or "").lower()
     if any(s in orig_domain for s in shortener_domains):
         redirect_risk_score += 0.45
         reasons.append("URL shortener service utilized to conceal original target domain")
@@ -296,7 +338,7 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
         reasons.append("Google Safe Browsing reports security threat on destination URL")
 
     url_intel_risk = float(url_intel.get("risk", 0.0))
-    if url_intel_risk >= 0.5:
+    if url_intel_risk >= 0.5 and not is_known_qr_host:
         intel_risk_score += 0.60
         for r in url_intel.get("reasons", []):
             if r not in reasons:
@@ -307,6 +349,19 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
         dest_risk_score += 0.50
         reasons.append("Unencrypted destination collecting sensitive credentials")
 
+    # 5. Trained ML Model Feature Inference
+    ml_prob = 0.0
+    model = _get_qr_model()
+    if model:
+        try:
+            from ...training.train_qr_detector import extract_url_features
+            features = extract_url_features(target_url)
+            ml_prob = float(model.predict_proba([features])[0][1])
+            if ml_prob >= 0.60 and not is_known_qr_host:
+                reasons.append(f"Trained QR ML Classifier detected phishing patterns ({ml_prob*100:.0f}% confidence)")
+        except Exception:
+            pass
+
     # Normalize scores between 0.0 and 1.0
     url_struct_score = min(1.0, round(url_struct_score, 2))
     redirect_risk_score = min(1.0, round(redirect_risk_score, 2))
@@ -315,28 +370,30 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
 
     # Overall Risk Score Calculation
     weighted_score = (
-        0.35 * url_struct_score +
-        0.25 * redirect_risk_score +
-        0.25 * intel_risk_score +
-        0.15 * dest_risk_score
+        0.30 * url_struct_score +
+        0.20 * redirect_risk_score +
+        0.20 * intel_risk_score +
+        0.15 * dest_risk_score +
+        0.15 * ml_prob
     )
+
+    if is_known_qr_host and not found_keywords and is_https and not vt_malicious and not sb_malicious:
+        # Recognized QR host (e.g. me-qr.com, qrco.de, flowcode.com) hosting clean PDF/content
+        weighted_score = min(0.12, weighted_score)
 
     if vt_malicious or sb_malicious:
         weighted_score = max(0.92, weighted_score)
 
-    # Boost if multiple high-risk indicators match
-    if url_struct_score >= 0.6 and redirect_risk_score >= 0.4:
+    if url_struct_score >= 0.6 and redirect_risk_score >= 0.4 and not is_known_qr_host:
         weighted_score = max(0.82, weighted_score)
 
-    # Multi-hop redirect escalation
-    if redirect_count >= 2:
+    if redirect_count >= 2 and not is_known_qr_host:
         weighted_score = max(0.65, weighted_score)
 
-    if redirect_count >= 2 and (url_struct_score >= 0.3 or dest_risk_score >= 0.3):
+    if redirect_count >= 2 and (url_struct_score >= 0.3 or dest_risk_score >= 0.3) and not is_known_qr_host:
         weighted_score = max(0.85, weighted_score)
 
     overall_risk = min(1.0, max(0.02, round(weighted_score, 2)))
-
 
     # Classification Thresholds
     if overall_risk >= 0.80:
@@ -348,8 +405,11 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
     else:
         risk_level = "SAFE"
 
-    if not reasons:
-        reasons.append("Valid HTTPS destination with clean URL structure and no threat intelligence flags")
+    if not reasons or (is_known_qr_host and risk_level == "SAFE"):
+        reasons = [
+            f"Recognized legitimate QR creation service ({domain if is_known_qr_host else 'verified domain'})",
+            "Valid HTTPS destination with clean URL structure and no threat intelligence flags"
+        ]
 
     return {
         "success": True,
@@ -388,4 +448,5 @@ def evaluate_standalone_qr_risk(item: Dict[str, Any], url_intel: Dict[str, Any])
             }
         }
     }
+
 
