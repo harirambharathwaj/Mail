@@ -116,8 +116,13 @@ def analyze_headers(sender, recipient, headers):
                     is_lookalike = True
 
             if is_lookalike:
-                score += 0.85
-                reasons.append(f"Sender domain '{domain}' is a deceptive lookalike spoofing recipient domain '{recipient_domain}' (targeted spear-phishing)")
+                matched_role = next((role for role in INTERNAL_ROLES if role in local_part.replace(".", "-").replace("_", "-").split("-")), None)
+                if matched_role or "ceo" in local_part or "executive" in local_part:
+                    score += 0.85
+                    reasons.append(f"Sender domain '{domain}' is a deceptive lookalike spoofing executive role '{matched_role or local_part}' at '{recipient_domain}' (targeted BEC / spear-phishing)")
+                else:
+                    score += 0.40
+                    reasons.append(f"Sender domain '{domain}' exhibits domain lookalike / typosquatting characteristics relative to '{recipient_domain}'")
 
             # B) Sensitive Internal Role Impersonation from External Domain
             matched_role = None

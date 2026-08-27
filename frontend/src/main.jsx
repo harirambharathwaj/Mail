@@ -107,12 +107,12 @@ const TEMPLATES = [
 function App() {
   const [activeView, setActiveView] = useState("dashboard") // "dashboard" | "compliance"
   const [form, setForm] = useState({
-    sender: TEMPLATES[0].sender,
-    recipient: TEMPLATES[0].recipient,
-    subject: TEMPLATES[0].subject,
-    body: TEMPLATES[0].body,
-    headers: TEMPLATES[0].headers || "",
-    attachments: TEMPLATES[0].attachments || []
+    sender: "hariram@mycompany.com",
+    recipient: "ceo@mycompany.com",
+    subject: "Quarterly Project Updates",
+    body: "Hi team, please find the updates for our project below.",
+    headers: "",
+    attachments: []
   })
   const [result, setResult] = useState(null)
   const [alerts, setAlerts] = useState([])
@@ -121,6 +121,38 @@ function App() {
   const [fallbackMode, setFallbackMode] = useState(false)
   const [searchAudit, setSearchAudit] = useState("")
   const [adminViewExpanded, setAdminViewExpanded] = useState(true)
+
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files || [])
+    files.forEach(file => {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const base64Content = event.target.result
+        const newAtt = {
+          name: file.name,
+          size: (file.size / 1024).toFixed(1) + " KB",
+          content: base64Content,
+          type: file.type
+        }
+        setForm(prev => ({
+          ...prev,
+          attachments: [...prev.attachments, newAtt]
+        }))
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const removeAttachment = (index) => {
+    setForm(prev => ({
+      ...prev,
+      attachments: prev.attachments.filter((_, i) => i !== index)
+    }))
+  }
+
+  const clearAttachments = () => {
+    setForm(prev => ({ ...prev, attachments: [] }))
+  }
 
   const refresh = async () => {
     try {
@@ -339,11 +371,59 @@ function App() {
               </div>
 
               <div className="form-group">
-                <label>Attachments ({form.attachments.length} attached)</label>
-                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)", background: "var(--bg-input)", padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)" }}>
-                  {form.attachments.length > 0
-                    ? form.attachments.map((a, i) => (typeof a === "string" ? a : a.name)).join(", ")
-                    : "No attachments loaded"}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <label style={{ margin: 0 }}>Attachments ({form.attachments.length} attached)</label>
+                  {form.attachments.length > 0 && (
+                    <button type="button" onClick={clearAttachments} style={{ background: "none", border: "none", color: "#f43f5e", fontSize: "0.75rem", cursor: "pointer", fontWeight: "700" }}>
+                      Clear All
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <input
+                    type="file"
+                    id="lab-attachment-input"
+                    style={{ display: "none" }}
+                    multiple
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.exe,.doc,.docx"
+                    onChange={handleFileUpload}
+                  />
+                  <label
+                    htmlFor="lab-attachment-input"
+                    className="btn-secondary"
+                    style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", width: "fit-content", padding: "6px 14px", fontSize: "0.82rem" }}
+                  >
+                    <span>📎</span> Attach PDF / File...
+                  </label>
+
+                  {form.attachments.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "4px" }}>
+                      {form.attachments.map((att, i) => {
+                        const name = typeof att === "string" ? att : att.name
+                        const size = typeof att === "object" && att.size ? att.size : null
+                        return (
+                          <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "var(--bg-card)", border: "1px solid var(--border-subtle)", padding: "6px 10px", borderRadius: "6px", fontSize: "0.8rem" }}>
+                            <span>📄</span>
+                            <span style={{ fontWeight: "600", color: "var(--text-main)" }}>{name}</span>
+                            {size && <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>({size})</span>}
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(i)}
+                              style={{ background: "none", border: "none", color: "#f43f5e", cursor: "pointer", fontWeight: "bold", padding: "0 4px", fontSize: "0.9rem" }}
+                              title="Remove attachment"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)", background: "var(--bg-input)", padding: "8px 12px", borderRadius: "var(--radius-sm)", border: "1px dashed var(--border-subtle)" }}>
+                      No attachments attached. Click button above to attach your PDF or file.
+                    </div>
+                  )}
                 </div>
               </div>
 
