@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+phishing.db
+node_modules/
+dist/
+artifacts/
+*.joblib
+*.log
