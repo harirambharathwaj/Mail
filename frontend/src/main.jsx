@@ -253,6 +253,12 @@ function App() {
             🛡️ Main Dashboard
           </button>
           <button
+            className={`role-tab-btn ${activeView === "qr" ? "active" : ""}`}
+            onClick={() => setActiveView("qr")}
+          >
+            📱 QR Phishing Detector
+          </button>
+          <button
             className={`role-tab-btn ${activeView === "compliance" ? "active" : ""}`}
             onClick={() => setActiveView("compliance")}
           >
@@ -266,8 +272,12 @@ function App() {
         </div>
       </nav>
 
+      {/* VIEW 0: Standalone QR Phishing Detector */}
+      {activeView === "qr" && <QRDetectorView api={API} />}
+
       {/* VIEW 1: Main Dashboard */}
       {activeView === "dashboard" && (
+
         <>
           {/* Module 01: Quishing & Image-Payload Detection Card */}
           <div className="quishing-module-card">
@@ -735,6 +745,512 @@ function App() {
           </table>
         )}
       </section>
+    </div>
+  )
+}
+
+function QRDetectorView({ api }) {
+  const [file, setFile] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [step, setStep] = useState(0)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+  const [scans, setScans] = useState([])
+
+  const fetchScans = async () => {
+    try {
+      const res = await fetch(`${api}/api/qr/scans`)
+      if (res.ok) {
+        const data = await res.json()
+        setScans(Array.isArray(data) ? data : [])
+      }
+    } catch (e) {
+      console.error("Failed to fetch QR scans history:", e)
+    }
+  }
+
+  useEffect(() => {
+    fetchScans()
+  }, [])
+
+  const handleFileSelect = (selectedFile) => {
+    setError(null)
+    setResult(null)
+
+    if (!selectedFile) return
+
+    const validExts = [".png", ".jpg", ".jpeg", ".webp"]
+    const filename = selectedFile.name.toLowerCase()
+    const isExtValid = validExts.some(ext => filename.endsWith(ext))
+
+    if (!isExtValid) {
+      setError("Unsupported file type. Upload PNG, JPG, JPEG or WEBP.")
+      return
+    }
+
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError("File exceeds the maximum allowed size (10 MB).")
+      return
+    }
+
+    setFile(selectedFile)
+    setPreviewUrl(URL.createObjectURL(selectedFile))
+  }
+
+  const removeFile = () => {
+    setFile(null)
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
+    setResult(null)
+    setError(null)
+  }
+
+  const analyzeQR = async () => {
+    if (!file) return
+
+    setAnalyzing(true)
+    setError(null)
+    setResult(null)
+    setStep(1)
+
+    const timer1 = setTimeout(() => setStep(2), 250)
+    const timer2 = setTimeout(() => setStep(3), 500)
+    const timer3 = setTimeout(() => setStep(4), 750)
+    const timer4 = setTimeout(() => setStep(5), 1000)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const response = await fetch(`${api}/api/qr/analyze`, {
+        method: "POST",
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.detail || `Server returned status HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      setResult(data)
+      fetchScans()
+    } catch (err) {
+      console.error("QR Analysis Error:", err)
+      setError(String(err.message || err))
+    } finally {
+      clearTimeout(timer1)
+      clearTimeout(timer2)
+      clearTimeout(timer3)
+      clearTimeout(timer4)
+      setAnalyzing(false)
+    }
+  }
+
+  const inspectScanRow = (scanRow) => {
+    const decUrl = scanRow.decoded_url || ""
+    const isHttps = (scanRow.final_url || decUrl).toLowerCase().startsWith("https://")
+
+    setResult({
+      success: true,
+      qr_detected: scanRow.qr_detected,
+      filename: scanRow.filename,
+      payload_type: scanRow.payload_type,
+      payload: decUrl,
+      decoded_url: decUrl,
+      is_https: isHttps,
+      redirect_count: scanRow.redirect_count,
+      redirect_chain: scanRow.redirect_chain || [],
+      final_url: scanRow.final_url || decUrl,
+      risk_score: scanRow.risk_score,
+      risk_level: scanRow.risk_level,
+      reasons: scanRow.reasons || [],
+      breakdown: scanRow.breakdown || {},
+      threat_intelligence: scanRow.threat_intelligence || {}
+    })
+  }
+
+  const formatSize = (bytes) => {
+    if (!bytes) return "0 KB"
+    const kb = bytes / 1024
+    if (kb < 1024) return `${kb.toFixed(0)} KB`
+    return `${(kb / 1024).toFixed(2)} MB`
+  }
+
+  const riskClass = (result?.risk_level || "SAFE").toLowerCase().replace(" ", "_")
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      <div className="quishing-module-card">
+        <div className="quishing-card-header">
+          <div className="quishing-number-badge">QR</div>
+          <h3 className="quishing-card-title">Standalone QR Phishing &amp; Quishing Detector</h3>
+        </div>
+        <p className="quishing-card-desc">
+          Upload a QR code image to decode its payload, resolve redirect chains with SSRF protection, evaluate destination characteristics, and inspect threat intelligence detections.
+        </p>
+      </div>
+
+      <main>
+        {/* Left Column: Upload Area & Loading State */}
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Upload QR Code Image</h2>
+              <span>Scan image files for embedded QR payloads and quishing risks</span>
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ background: "rgba(244, 63, 94, 0.15)", border: "1px solid rgba(244, 63, 94, 0.4)", borderRadius: "var(--radius-sm)", padding: "12px 16px", color: "#f43f5e", fontSize: "0.85rem", fontWeight: "600" }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          {!file ? (
+            <div
+              className={`qr-dropzone ${isDragging ? "dragging" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setIsDragging(false)
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  handleFileSelect(e.dataTransfer.files[0])
+                }
+              }}
+            >
+              <div className="qr-dropzone-icon">📷</div>
+              <h3>Scan a QR Code for Phishing</h3>
+              <p>Upload a QR code image to check whether its destination is potentially malicious.</p>
+
+              <label className="qr-choose-btn">
+                [ Choose Image ]
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/jpg, image/webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0])
+                    }
+                  }}
+                />
+              </label>
+
+              <span style={{ fontSize: "0.76rem", color: "var(--text-dim)", marginTop: "4px" }}>
+                or drag &amp; drop an image here
+              </span>
+            </div>
+          ) : (
+            <div className="qr-preview-card">
+              <div className="qr-preview-img-container">
+                <img src={previewUrl} alt="QR Preview" className="qr-preview-img" />
+              </div>
+              <div className="qr-preview-info">
+                <div className="qr-preview-filename">{file.name}</div>
+                <div className="qr-preview-size">{formatSize(file.size)}</div>
+              </div>
+
+              {!analyzing && (
+                <div className="qr-action-btns">
+                  <button className="qr-btn-remove" onClick={removeFile}>
+                    [ Remove ]
+                  </button>
+                  <button className="qr-btn-analyze" onClick={analyzeQR}>
+                    Analyze QR
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {analyzing && (
+            <div className="qr-loading-checklist">
+              <div className="qr-loading-title">
+                Analyzing QR code...
+              </div>
+
+              <div className={`qr-checklist-item ${step >= 1 ? "done" : "active"}`}>
+                {step >= 1 ? "✓" : "○"} Detecting QR
+              </div>
+              <div className={`qr-checklist-item ${step >= 2 ? "done" : (step === 1 ? "active" : "")}`}>
+                {step >= 2 ? "✓" : "○"} Decoding payload
+              </div>
+              <div className={`qr-checklist-item ${step >= 3 ? "done" : (step === 2 ? "active" : "")}`}>
+                {step >= 3 ? "✓" : "○"} Checking URL
+              </div>
+              <div className={`qr-checklist-item ${step >= 4 ? "done" : (step === 3 ? "active" : "")}`}>
+                {step >= 4 ? "✓" : "○"} Resolving redirects
+              </div>
+              <div className={`qr-checklist-item ${step >= 5 ? "done" : (step === 4 ? "active" : "")}`}>
+                {step >= 5 ? "✓" : "○"} Calculating risk
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Right Column: QR Verdict Card & Risk Breakdown */}
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>QR Inspection Result</h2>
+              <span>Decoded payload analysis, threat telemetry &amp; risk score</span>
+            </div>
+          </div>
+
+          {!result && !analyzing && (
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", justifyContent: "center", alignItems: "center", minHeight: "360px", color: "var(--text-muted)" }}>
+              <div style={{ fontSize: "2.8rem", marginBottom: "12px" }}>📱</div>
+              <p style={{ fontWeight: "700", color: "var(--text-main)" }}>Awaiting QR Image Upload</p>
+              <p style={{ fontSize: "0.82rem", textAlign: "center", maxWidth: "260px", marginTop: "4px" }}>
+                Select or drop a QR code image on the left and click Analyze QR.
+              </p>
+            </div>
+          )}
+
+          {result && !analyzing && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {!result.qr_detected ? (
+                <div style={{ background: "rgba(245, 158, 11, 0.12)", border: "2px solid #f59e0b", borderRadius: "var(--radius-md)", padding: "24px", textAlign: "center", color: "#fef3c7" }}>
+                  <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>⚠️</div>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: "800", marginBottom: "6px" }}>No readable QR code detected</h3>
+                  <p style={{ fontSize: "0.88rem", color: "var(--text-muted)" }}>
+                    {result.message || "Try uploading a clearer QR image."}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className={`qr-verdict-card ${riskClass}`}>
+                    <div className="qr-verdict-icon">
+                      {result.risk_level === "PHISHING" ? "✕" : (result.risk_level === "SUSPICIOUS" ? "⚠️" : "✓")}
+                    </div>
+                    <div className="qr-verdict-title">
+                      {result.risk_level === "PHISHING"
+                        ? "PHISHING DETECTED"
+                        : (result.risk_level === "SUSPICIOUS" ? "SUSPICIOUS" : result.risk_level)}
+                    </div>
+                    <div className="qr-verdict-desc">
+                      {result.risk_level === "PHISHING"
+                        ? "This QR code leads to a potentially malicious destination."
+                        : (result.risk_level === "SUSPICIOUS"
+                          ? "This QR code leads to a potentially risky destination."
+                          : "QR code destination appears safe.")}
+                    </div>
+                    <div className="qr-verdict-score-pill">
+                      Risk Score {(Number(result.risk_score || 0) * 100).toFixed(0)}%
+                    </div>
+                  </div>
+
+                  <div className="qr-grid-specs">
+                    <div className="qr-spec-item">
+                      <span>QR Code</span>
+                      <strong style={{ color: "var(--color-safe)" }}>Detected ✓</strong>
+                    </div>
+                    <div className="qr-spec-item">
+                      <span>Payload</span>
+                      <strong>{result.payload_type?.toUpperCase() || "URL"}</strong>
+                    </div>
+                    <div className="qr-spec-item">
+                      <span>HTTPS</span>
+                      <strong style={{ color: result.is_https ? "var(--color-safe)" : "var(--color-phishing)" }}>
+                        {result.is_https ? "YES" : "NO"}
+                      </strong>
+                    </div>
+                    <div className="qr-spec-item">
+                      <span>Redirects</span>
+                      <strong>{result.redirect_count || 0}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ background: "rgba(15, 23, 42, 0.6)", padding: "12px 16px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)" }}>
+                    <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "var(--text-dim)", fontWeight: "700", marginBottom: "4px" }}>
+                      Decoded URL
+                    </div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.84rem", color: "var(--text-main)", wordBreak: "break-all" }}>
+                      {result.decoded_url || result.payload}
+                    </div>
+
+                    {result.final_url && result.final_url !== result.decoded_url && (
+                      <div style={{ marginTop: "10px", paddingTop: "8px", borderTop: "1px solid var(--border-subtle)" }}>
+                        <div style={{ fontSize: "0.7rem", textTransform: "uppercase", color: "var(--text-dim)", fontWeight: "700", marginBottom: "4px" }}>
+                          Final Destination
+                        </div>
+                        <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.84rem", color: "#60a5fa", wordBreak: "break-all" }}>
+                          {result.final_url}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: "0.76rem", color: "var(--text-dim)", textTransform: "uppercase", fontWeight: "700" }}>
+                      Threat Intelligence
+                    </span>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "6px" }}>
+                      <div style={{ background: "rgba(255, 255, 255, 0.02)", padding: "10px 14px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)" }}>
+                        <span style={{ fontSize: "0.68rem", textTransform: "uppercase", color: "var(--text-dim)", fontWeight: "700" }}>VirusTotal</span>
+                        <div style={{ fontSize: "0.84rem", fontWeight: "700", marginTop: "2px", color: result.threat_intelligence?.virustotal?.configured ? (result.threat_intelligence.virustotal.malicious ? "var(--color-phishing)" : "var(--color-safe)") : "var(--text-dim)" }}>
+                          {result.threat_intelligence?.virustotal?.configured
+                            ? (result.threat_intelligence.virustotal.malicious ? "🔴 Malicious Hit" : "✓ No malicious detections")
+                            : "— Not configured"}
+                        </div>
+                      </div>
+
+                      <div style={{ background: "rgba(255, 255, 255, 0.02)", padding: "10px 14px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)" }}>
+                        <span style={{ fontSize: "0.68rem", textTransform: "uppercase", color: "var(--text-dim)", fontWeight: "700" }}>Google Safe Browsing</span>
+                        <div style={{ fontSize: "0.84rem", fontWeight: "700", marginTop: "2px", color: result.threat_intelligence?.safe_browsing?.configured ? (result.threat_intelligence.safe_browsing.malicious ? "var(--color-phishing)" : "var(--color-safe)") : "var(--text-dim)" }}>
+                          {result.threat_intelligence?.safe_browsing?.configured
+                            ? (result.threat_intelligence.safe_browsing.malicious ? "🔴 Threat Reported" : "✓ No threat detected")
+                            : "— Not configured"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {(!result.threat_intelligence?.virustotal?.configured || !result.threat_intelligence?.safe_browsing?.configured) && (
+                      <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "6px", fontStyle: "italic" }}>
+                        Threat intelligence unavailable. Local URL analysis was still performed.
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: "0.76rem", color: "var(--text-dim)", textTransform: "uppercase", fontWeight: "700" }}>
+                      Why this result?
+                    </span>
+                    <ul className="reasons-list" style={{ marginTop: "6px" }}>
+                      {(result.reasons || []).map((r, idx) => (
+                        <li key={idx}>• {r}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="qr-breakdown-section">
+                    <div className="qr-breakdown-title">Visual Risk Breakdown</div>
+                    
+                    <BreakdownBar label="URL Structure" value={result.breakdown?.url_structure ?? 0} />
+                    <BreakdownBar label="Redirect Risk" value={result.breakdown?.redirect_risk ?? 0} />
+                    <BreakdownBar label="Threat Intelligence" value={result.breakdown?.threat_intel ?? 0} />
+                    <BreakdownBar label="Destination Risk" value={result.breakdown?.destination_risk ?? 0} />
+
+                    <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "8px", marginTop: "4px" }}>
+                      <div className="qr-breakdown-header" style={{ fontSize: "0.88rem", fontWeight: "800" }}>
+                        <span>Overall QR Risk</span>
+                        <span style={{ color: result.risk_level === "PHISHING" ? "var(--color-phishing)" : (result.risk_level === "SUSPICIOUS" ? "var(--color-suspicious)" : "var(--color-safe)") }}>
+                          {(Number(result.risk_score || 0) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="redirect-chain-container">
+                    <div className="redirect-chain-header">Redirect Chain</div>
+                    {result.redirect_chain && result.redirect_chain.length > 1 ? (
+                      <div className="redirect-chain-hops">
+                        {result.redirect_chain.map((hop, hIdx) => (
+                          <div key={hIdx} className="redirect-hop">
+                            <span className="hop-badge">{hIdx + 1}.</span>
+                            <span className="hop-url">{hop}</span>
+                            {hIdx < result.redirect_chain.length - 1 && <span className="hop-arrow" style={{ marginLeft: "auto" }}>↓</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                        No redirects detected.
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      </main>
+
+      <section className="panel incident-log">
+        <div className="panel-header">
+          <div>
+            <h2>Recent QR Scans</h2>
+            <span>Audit trail of standalone QR image inspections</span>
+          </div>
+        </div>
+
+        {scans.length === 0 ? (
+          <p style={{ textAlign: "center", color: "var(--text-dim)", padding: "20px 0", fontSize: "0.85rem" }}>
+            No recent QR image scans found. Upload a QR code image above.
+          </p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Time / ID</th>
+                <th>Filename</th>
+                <th>Decoded URL / Destination</th>
+                <th>Result</th>
+                <th>Risk Score</th>
+                <th style={{ textAlign: "right" }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scans.slice(0, 15).map((row) => {
+                const rowRiskClass = (row.risk_level || "SAFE").toLowerCase().replace(" ", "_")
+                return (
+                  <tr key={row.id}>
+                    <td style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+                      #{row.id}
+                    </td>
+                    <td style={{ fontWeight: "600" }}>{row.filename}</td>
+                    <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      {row.final_url || row.decoded_url || "No payload"}
+                    </td>
+                    <td>
+                      <span className={`log-badge ${rowRiskClass}`}>
+                        {row.risk_level}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: "700" }}>
+                      {(Number(row.risk_score || 0) * 100).toFixed(0)}%
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        onClick={() => inspectScanRow(row)}
+                        style={{ background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.3)", color: "#60a5fa", padding: "4px 10px", borderRadius: "6px", fontSize: "0.76rem", cursor: "pointer", fontWeight: "600" }}
+                      >
+                        Inspect
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function BreakdownBar({ label, value }) {
+  const percent = Math.min(100, Math.max(0, Math.round(value * 100)))
+  let color = "var(--color-safe)"
+  if (percent >= 75) color = "var(--color-phishing)"
+  else if (percent >= 40) color = "var(--color-suspicious)"
+
+  return (
+    <div className="qr-breakdown-row">
+      <div className="qr-breakdown-header">
+        <span className="qr-breakdown-label">{label}</span>
+        <span className="qr-breakdown-val" style={{ color }}>{percent}%</span>
+      </div>
+      <div className="meter-bg">
+        <div
+          className="meter-fill"
+          style={{ width: `${percent}%`, backgroundColor: color, boxShadow: `0 0 8px ${color}` }}
+        />
+      </div>
     </div>
   )
 }

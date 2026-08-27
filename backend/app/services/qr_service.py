@@ -154,3 +154,59 @@ def analyze_email_quishing(
 
     # Calculate overall QR risk report
     return calculate_overall_qr_risk(processed_items)
+
+def analyze_qr_upload_file(file_bytes: bytes, filename: str = "uploaded_qr.png") -> Dict[str, Any]:
+    """
+    Decodes an uploaded QR image file, resolves redirects safely, runs URL threat analysis,
+    and returns a complete standalone QR phishing verdict.
+    """
+    from .qr_risk import evaluate_standalone_qr_risk
+    from ..database import save_qr_scan
+
+    if not file_bytes:
+        res = {
+            "success": False,
+            "qr_detected": False,
+            "message": "Uploaded file is empty."
+        }
+        return res
+
+    # 1. Scan image bytes for QR codes
+    filename_lower = filename.lower()
+    if filename_lower.endswith(".pdf"):
+        raw_qrs = scan_pdf_bytes(file_bytes, filename=filename)
+    else:
+        raw_qrs = scan_image_bytes(file_bytes, filename=filename, source="upload")
+
+    if not raw_qrs:
+        res = {
+            "success": False,
+            "qr_detected": False,
+            "filename": filename,
+            "message": "No readable QR code was detected in the uploaded image."
+        }
+        # Save unreadable scan record
+        try:
+            save_qr_scan(res)
+        except Exception:
+            pass
+        return res
+
+    # 2. Take the primary detected QR code
+    primary_qr = raw_qrs[0]
+
+    # 3. Process single QR item (resolves redirects with SSRF check, threat intel)
+    item_record = process_single_qr(primary_qr)
+
+    # 4. Compute standalone risk verdict and breakdown
+    result = evaluate_standalone_qr_risk(item_record, item_record.get("url_threat_intel") or {})
+    result["filename"] = filename
+
+    # 5. Persist scan in DB history
+    try:
+        save_qr_scan(result)
+    except Exception as e:
+        print(f"Warning: Failed to save QR scan to database: {e}")
+
+    return result
+
